@@ -1,0 +1,26 @@
+{
+  "version": "1.0.1",
+  "author": "doramart <doramart@qq.com>",
+  "name": "egg-dora-handlebars",
+  "description": "egg view plugin for handlebars with extend",
+  "eggPlugin": {
+    "name": "doraHandlebars"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/doramart/egg-dora-handlebars.git"
+  },
+  "keywords": [
+    "egg",
+    "egg-plugin",
+    "egg-view",
+    "handlebars"
+  ],
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "dependencies": {
+    "handlebars": "^4.0.11",
+    "mz": "^2.7.0"
+  }
+}
