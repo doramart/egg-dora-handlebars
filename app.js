@@ -1,77 +1,100 @@
-const fs = require('mz/fs');
+'use strict';
+
 const path = require('path');
+const fs = require('mz/fs');
 const handlebars = require('handlebars');
+
 const COMPILE = Symbol('compile');
-const extend = require('./lib/extend');
-const caches = {};
 
-exports = module.exports = app => {
-  const config = app.config.handlebars;
-  const partialsPath = config.partialsPath;
-
-  registerLayouts(config);
-  registerPartials(partialsPath);
-
+module.exports = app => {
+  const partials = loadPartial(app);
+  if (partials) {
+    for (const key of Object.keys(partials)) {
+      console.log('---partials[key]--', key)
+      if (key) {
+        handlebars.registerPartial(key, partials[key]);
+      }
+    }
+  }
+  // console.log('--partials--', partials)
+  const helpers = loadHelper(app);
+  if (helpers) {
+    for (const key of Object.keys(helpers)) {
+      handlebars.registerHelper(key, helpers[key]);
+    }
+  }
   class HandlebarsView {
     constructor(ctx) {
       this.app = ctx.app;
     }
 
     async render(name, context, options) {
-      let content;
-      const useCache = config['cache'] === true;
-
-      if (caches[name] && useCache) {
-        content = caches[name];
-      } else {
-        content = await fs.readFile(name, 'utf8');
-        content = extend.parse(content);
-        useCache && (caches[name] = content);
-      }
+      const content = await fs.readFile(name, 'utf8');
       return this[COMPILE](content, context, options);
     }
 
     async renderString(tpl, context, options) {
-      tpl = extend.parse(tpl);
       return this[COMPILE](tpl, context, options);
     }
 
     [COMPILE](tpl, context, options) {
-      return handlebars.compile(tpl, Object.assign({}, config, options))(context);
+      return handlebars.compile(tpl, Object.assign({}, this.app.config.handlebars, options))(context);
     }
   }
-
   app.view.use('handlebars', HandlebarsView);
 };
 
-function registerLayouts(config) {
-  extend.init(config);
-}
+function loadPartial(app) {
+  const partialsPath = app.config.handlebars.partialsPath;
+  // istanbul ignore next
+  if (!fs.existsSync(partialsPath)) return;
 
-function registerPartials(partialsDir) {
-  var walk = function (filepath) {
-    files = fs.readdirSync(filepath);
-    files.forEach(function (item) {
-      var tmpPath = filepath + '/' + item,
-        stats = fs.statSync(tmpPath);
+  const partials = {};
+  const files = fs.readdirSync(partialsPath);
 
-      if (stats.isDirectory()) {
-        walk(tmpPath);
+  // for (let name of files) {
+  //   const file = path.join(partialsPath, name);
+  //   const stat = fs.statSync(file);
+  //   if (!stat.isFile()) continue;
+
+  //   name = name
+  //     .replace(/\.\w+$/, '')
+  //   // .replace(/[_-][a-z]/ig, s => s.substring(1).toUpperCase());
+  //   // partials[name] = fs.readFileSync(file).toString();
+  //   partials[name] = fs.readFileSync(file).toString();
+  // }
+  const readDir = (entry) => {
+    const dirInfo = fs.readdirSync(entry);
+    dirInfo.forEach(item => {
+      const location = path.join(entry, item);
+      const info = fs.statSync(location);
+      if (info.isDirectory()) {
+        console.log(`dir:${location}`);
+        readDir(location);
       } else {
-        var isValidTemplate = /\.(html|hbs|handlebars)$/.test(tmpPath);
-        if (isValidTemplate) {
-          var ext = path.extname(tmpPath);
-          var templateName = path.relative(partialsDir, tmpPath)
-            .slice(0, -(ext.length)).replace(/[ -]/g, '_').replace(/\\/g, '/');
-
-          var templateContent = fs.readFileSync(tmpPath, 'utf-8');
-          handlebars.registerPartial(templateName, templateContent);
-        }
+        console.log(`item:${item}`);
+        item = item.replace(/\.\w+$/, '')
+        partials[item] = fs.readFileSync(location).toString();
       }
-    });
-  };
+    })
+  }
 
-  walk(partialsDir);
+  readDir(partialsPath);
+  return partials;
 }
 
-exports.handlebars = handlebars;
+function loadHelper(app) {
+  const helperPath = resolveModule(app.config.handlebars.helperPath);
+  if (!fs.existsSync(helperPath)) return;
+
+  return app.loader.loadFile(helperPath) || {};
+}
+
+function resolveModule(filepath) {
+  try {
+    return require.resolve(filepath);
+  } catch (e) {
+    // istanbul ignore next
+    return undefined;
+  }
+}
